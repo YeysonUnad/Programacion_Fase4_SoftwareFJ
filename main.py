@@ -46,28 +46,28 @@ class Entidad(ABC):
         pass
 
 class Cliente(Entidad):
-    """
-    Clase Cliente con Encapsulamiento de datos personales.
-    Valida la integridad de la información al momento de instanciar.
-    """
-    def __init__(self, id_cliente, nombre, correo):
+    def __init__(self, id_cliente: str, nombre: str, correo: str):
         super().__init__(id_cliente)
-        # Validación de parámetros para evitar datos corruptos
-        if not nombre or "@" not in correo:
-            raise DatosInvalidosError(f"Datos de cliente incorrectos: '{nombre}', '{correo}'")
         
-        # Atributos privados (Encapsulamiento: uso de doble guion bajo)
-        self.__nombre = nombre  
-        self.__correo = correo
+        # MEJORA: Validación con Expresiones Regulares (Regex)
+        # Evita correos mal formados como "usuario@" o "@@.com"
+        patron_correo = r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$'
+        if not nombre or not re.match(patron_correo, correo.lower()):
+            raise DatosInvalidosError(f"Datos de cliente inválidos: {nombre}, {correo}")
+        
+        # MEJORA: Atributos protegidos (Convención Pythonic '_')
+        # Facilita las pruebas unitarias y sigue el estándar de la industria
+        self._nombre = nombre  
+        self._correo = correo
 
     def mostrar_detalle(self):
-        """Implementación del método abstracto de Entidad."""
-        return f"Cliente: {self.__nombre} (ID: {self.id_entidad})"
+        return f"Cliente: {self._nombre} (ID: {self.id_entidad})"
 
     @property
     def nombre(self):
-        """Getter para acceder al nombre privado de forma controlada."""
-        return self.__nombre
+        """Getter para acceder al nombre cumpliendo el Encapsulamiento."""
+        return self._nombre
+
 
 # =================================================================
 # SERVICIOS Y POLIMORFISMO (Pilares POO: Herencia y Polimorfismo)
