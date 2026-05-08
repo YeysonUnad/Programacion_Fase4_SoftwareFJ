@@ -107,44 +107,49 @@ class AsesoriaEspecializada(Servicio):
         return (self.costo_base * horas) * iva
 
 # =================================================================
-# GESTIÓN DE RESERVAS Y MANEJO DE EXCEPCIONES
-# Coordina objetos y gestiona errores con bloques try/except/finally.
+# GESTIÓN DE RESERVAS (Mejora: Inyección de Dependencias)
 # =================================================================
 class Reserva:
-    """Clase mediadora que integra Cliente y Servicio."""
-    def __init__(self, cliente, servicio, magnitud):
+    """Clase que integra Cliente y Servicio de forma flexible."""
+    
+    # MEJORA: Uso de **configuracion_servicio (**kwargs)
+    # POR QUÉ: Permite que la Reserva funcione con cualquier servicio
+    # sin importar si pide 'horas', 'cantidad' o 'es_premium'.
+    def __init__(self, cliente: Cliente, servicio: Servicio, **configuracion_servicio):
         self.cliente = cliente
         self.servicio = servicio
-        self.magnitud = magnitud # Puede ser horas o cantidad según el servicio
+        self.configuracion = configuracion_servicio
         self.estado = "Pendiente"
 
     def procesar_reserva(self):
-        """Ejecuta la lógica de reserva con control de errores avanzado."""
+        """Ejecuta la lógica con control de errores por parámetros."""
         try:
-            # Validación de integridad del objeto cliente
-            if self.cliente is None:
-                raise ReservaInvalidaError("No se puede procesar una reserva sin un cliente válido.")
+            if not self.cliente:
+                raise DatosInvalidosError("No se puede procesar sin un cliente válido.")
             
-            # Aplicación de Polimorfismo: el cálculo depende del tipo de servicio
-            costo = self.servicio.calcular_costo(self.magnitud)
+            # MEJORA: Desempaquetado dinámico
+            # Pasa automáticamente los argumentos correctos al servicio.
+            costo = self.servicio.calcular_costo(**self.configuracion)
+            
             self.estado = "Confirmada"
-            print(f"ÉXITO: {self.servicio.nombre_servicio} para {self.cliente.nombre}. Costo: ${costo:,.0f}")
+            # MEJORA: Formato monetario profesional con separador de miles
+            print(f"ÉXITO: {self.servicio.nombre_servicio} para {self.cliente.nombre}. Total: ${costo:,.0f}")
         
-        except (ReservaInvalidaError, DatosInvalidosError) as e:
-            # Captura de errores de lógica de negocio y registro en log
+        except TypeError as e:
+            # MEJORA: Captura de errores si faltan o sobran parámetros
+            logging.error(f"Error de parámetros en {self.servicio.nombre_servicio}: {e}")
+            print(f"ERROR: Los datos proporcionados no coinciden con el tipo de servicio.")
             self.estado = "Fallida"
-            logging.error(f"Error en proceso de reserva: {e}")
-            print(f"ERROR CONTROLADO: {e}")
         
         except Exception as e:
-            # Captura de errores inesperados (estabilidad del sistema)
-            logging.error(f"Error crítico inesperado: {e}")
-            print("Ha ocurrido un error inesperado, el sistema permanece estable.")
+            logging.error(f"Error crítico: {e}")
+            self.estado = "Fallida"
+            print("Ha ocurrido un error inesperado en el sistema.")
         
         finally:
-            # Bloque de cierre: se ejecuta siempre para limpieza o auditoría
-            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            print(f"Resultado: {self.estado} | Registro: {fecha_actual}\n")
+            fecha = datetime.now().strftime("%H:%M:%S")
+            print(f"Resultado: {self.estado} | Registro: {fecha}\n")
+
 
 # =================================================================
 # SIMULACIÓN DE OPERACIONES (10 Casos de Prueba)
