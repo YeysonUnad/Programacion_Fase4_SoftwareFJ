@@ -1,12 +1,11 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Any
 
-# =================================================================
-# CONFIGURACIÓN DE LOGS (Requerimiento de la Fase 4)
-# Se encarga de registrar errores en un archivo externo para 
-# garantizar la estabilidad y trazabilidad del sistema.
-# =================================================================
+# CONFIGURACIÓN DE LOGS
+# Crea un archivo llamado 'sistema_errores.log' para registrar fallos
 logging.basicConfig(
     filename='sistema_errores.log',
     level=logging.ERROR,
@@ -85,26 +84,27 @@ class Servicio(ABC):
         pass
 
 class ReservaSala(Servicio):
-    """Servicio 1: Cálculo basado en horas de uso."""
-    def calcular_costo(self, horas):
+    def calcular_costo(self, horas, **kwargs): # Agregado **kwargs
         if horas <= 0:
             raise DatosInvalidosError("La duración en horas debe ser positiva.")
         return self.costo_base * horas
 
 class AlquilerEquipo(Servicio):
-    """Servicio 2: Cálculo basado en cantidad de dispositivos."""
-    def calcular_costo(self, cantidad):
+    def calcular_costo(self, cantidad, **kwargs): # Cambiado a 'cantidad' y **kwargs
         if cantidad <= 0:
             raise DatosInvalidosError("La cantidad de equipos debe ser mayor a cero.")
+        # Si pasas 'dias' en la simulación, puedes usarlo aquí o ignorarlo con **kwargs
         return self.costo_base * cantidad
 
 class AsesoriaEspecializada(Servicio):
-    """Servicio 3: Cálculo con aplicación de impuestos (IVA)."""
-    def calcular_costo(self, horas):
+    def calcular_costo(self, horas, es_premium=False, **kwargs): # Agregado es_premium y **kwargs
         if horas <= 0:
             raise DatosInvalidosError("Las horas de asesoría deben ser positivas.")
         iva = 1.19
-        return (self.costo_base * horas) * iva
+        total = (self.costo_base * horas) * iva
+        if es_premium:
+            total += 50000
+        return total
 
 # =================================================================
 # GESTIÓN DE RESERVAS (Mejora: Inyección de Dependencias)
@@ -142,9 +142,10 @@ class Reserva:
             self.estado = "Fallida"
         
         except Exception as e:
-            logging.error(f"Error crítico: {e}")
+            logging.error(f"Error crítico inesperado: {e}")
             self.estado = "Fallida"
             print("Ha ocurrido un error inesperado en el sistema.")
+
         
         finally:
             fecha = datetime.now().strftime("%H:%M:%S")
@@ -153,7 +154,7 @@ class Reserva:
 
 # =================================================================
 # SIMULACIÓN DE OPERACIONES (10 Casos de Prueba)
-# Demostración de robustez ante datos válidos e inválidos.
+# Demostración de robustez y registro de logs ante datos diversos.
 # =================================================================
 def iniciar_simulacion():
     print("=== SOFTWARE FJ - SISTEMA DE GESTIÓN PROFESIONAL ===\n")
@@ -165,40 +166,50 @@ def iniciar_simulacion():
 
     # 2. Creación de clientes (Casos 1, 2 y 3)
     try:
-        c1 = Cliente("001", "Yeyson Martínez", "yeyson@correo.com") # Válido
-        c2 = Cliente("002", "Ana Luz", "ana@correo.com")           # Válido
-        # Caso 4: Cliente con datos inválidos (Lanzará excepción)
-        c_error = Cliente("003", "", "correo_falso") 
+        c1 = Cliente("001", "Yeyson Martínez", "yeyson@correo.com")
+        c2 = Cliente("002", "Ana Luz", "ana@correo.com")
+        
+        # Caso de ERROR: Cliente con correo inválido (Detección por Regex)
+        print("--- Prueba Seguridad: Validación Regex ---")
+        c_error = Cliente("003", "Error User", "correo_falso")
     except DatosInvalidosError as e:
-        print(f"CASO 4 (Validación): {e}\n")
+        logging.error(f"Fallo en validación de seguridad: {e}")
+        print(f"Resultado esperado (ERROR CONTROLADO): {e}\n")
         c_error = None
 
-    # Caso 1: Reserva de sala exitosa
-    Reserva(c1, sala_vip, 4).procesar_reserva()
+    # --- SIMULACIÓN DE LOS 10 CASOS ---
+    
+    # Caso 1: Reserva de sala exitosa (Uso de horas)
+    Reserva(c1, sala_vip, horas=3).procesar_reserva()
 
-    # Caso 2: Alquiler de equipos exitoso
-    Reserva(c2, laptops, 3).procesar_reserva()
+    # Caso 2: Alquiler de equipos exitoso (Uso de cantidad y días)
+    Reserva(c2, laptops, cantidad=2, dias=5).procesar_reserva()
 
-    # Caso 3: Asesoría especializada con IVA exitosa
-    Reserva(c1, consultoria, 2).procesar_reserva()
+    # Caso 3: Asesoría especializada con IVA exitosa (Uso de es_premium)
+    Reserva(c1, consultoria, es_premium=True).procesar_reserva()
 
-    # Caso 5: Error por horas negativas en sala
-    Reserva(c2, sala_vip, -5).procesar_reserva()
+    # Caso 4: Intento de reserva con cliente inválido (Captura None)
+    Reserva(c_error, sala_vip, horas=2).procesar_reserva()
+
+    # Caso 5: Error por horas negativas en sala (Validación de lógica)
+    Reserva(c2, sala_vip, horas=-5).procesar_reserva()
 
     # Caso 6: Error por cantidad cero en equipos
-    Reserva(c1, laptops, 0).procesar_reserva()
+    Reserva(c1, laptops, cantidad=0, dias=1).procesar_reserva()
 
-    # Caso 7: Intento de reserva con cliente inválido (None)
-    Reserva(c_error, sala_vip, 2).procesar_reserva()
+    # Caso 7: Reserva de sala por tiempo prolongado
+    Reserva(c2, sala_vip, horas=12).procesar_reserva()
 
-    # Caso 8: Reserva de sala por tiempo prolongado
-    Reserva(c2, sala_vip, 12).procesar_reserva()
+    # Caso 8: Alquiler masivo de equipos
+    Reserva(c1, laptops, cantidad=10).procesar_reserva()
 
-    # Caso 9: Alquiler masivo de equipos
-    Reserva(c1, laptops, 20).procesar_reserva()
+    # Caso 9: Asesoría estándar (No premium)
+    # Agregamos 'horas=5' para que el cálculo sea correcto
+    Reserva(c2, consultoria, horas=5, es_premium=False).procesar_reserva()
 
-    # Caso 10: Asesoría de una sola hora
-    Reserva(c2, consultoria, 1).procesar_reserva()
+    # Caso 10: Prueba de parámetros incorrectos (Dispara TypeError y Log)
+    print("--- Prueba Robustez: Parámetros incorrectos ---")
+    Reserva(c1, sala_vip, minutos=30).procesar_reserva()
 
 if __name__ == "__main__":
     iniciar_simulacion()
